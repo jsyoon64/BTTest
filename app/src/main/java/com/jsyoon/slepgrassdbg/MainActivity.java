@@ -12,11 +12,17 @@ import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.Html;
+import android.text.method.ScrollingMovementMethod;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
+import android.widget.TextView;
 
 import com.jsyoon.slepgrassdbg.bluetooth.DeviceConnector;
+import com.jsyoon.slepgrassdbg.bluetooth.DeviceData;
 import com.jsyoon.slepgrassdbg.bluetooth.DeviceListActivity;
 import com.jsyoon.slepgrassdbg.utils.Const;
 import com.jsyoon.slepgrassdbg.utils.Utils;
@@ -29,7 +35,18 @@ public class MainActivity extends AppCompatActivity {
     static final int REQUEST_CONNECT_DEVICE = 1;
     static final int REQUEST_ENABLE_BT = 2;
 
+    private static final String DEVICE_NAME = "DEVICE_NAME";
+    private static final String LOG = "LOG";
+
     BluetoothAdapter btAdapter;
+    private static DeviceConnector connector;
+    private static BluetoothResponseHandler mHandler;
+
+    private StringBuilder logHtml;
+    private TextView logTextView;
+    private EditText commandEditText;
+
+    private String deviceName;
 
     private static final String SAVED_PENDING_REQUEST_ENABLE_BT = "PENDING_REQUEST_ENABLE_BT";
     boolean pendingRequestEnableBt = false;
@@ -48,15 +65,45 @@ public class MainActivity extends AppCompatActivity {
             showAlertDialog(no_bluetooth);
         }
 
+        if (mHandler == null) mHandler = new BluetoothResponseHandler(this);
+        else mHandler.setTarget(this);
+
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        getSupportActionBar().setSubtitle(R.string.msg_not_connected);
+
+        if (isConnected() && (savedInstanceState != null)) {
+            setDeviceName(savedInstanceState.getString(DEVICE_NAME));
+        } else {
+            getSupportActionBar().setSubtitle(R.string.msg_not_connected);
+        }
+
+        this.logHtml = new StringBuilder();
+        if (savedInstanceState != null) this.logHtml.append(savedInstanceState.getString(LOG));
+
+        this.logTextView = (TextView) findViewById(R.id.log_textview);
+        this.logTextView.setMovementMethod(new ScrollingMovementMethod());
+        this.logTextView.setText(Html.fromHtml(logHtml.toString()));
+
+        this.commandEditText = (EditText) findViewById(R.id.command_edittext);
+        // soft-keyboard send button
+        this.commandEditText.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_SEND) {
+                    sendCommand(null);
+                    return true;
+                }
+                return false;
+            }
+        });
+
     }
 
     @Override
     public void onStart() {
         super.onStart();
+
         if (btAdapter == null) return;
 
         if (!btAdapter.isEnabled() && !pendingRequestEnableBt) {
@@ -75,12 +122,12 @@ public class MainActivity extends AppCompatActivity {
                 if (resultCode == Activity.RESULT_OK) {
                     String address = data.getStringExtra(DeviceListActivity.EXTRA_DEVICE_ADDRESS);
                     BluetoothDevice device = btAdapter.getRemoteDevice(address);
-                    if (super.isAdapterReady() && (connector == null)) setupConnector(device);
+                    if (isAdapterReady() && (connector == null)) setupConnector(device);
                 }
                 break;
             case REQUEST_ENABLE_BT:
                 // When the request to enable Bluetooth returns
-                super.pendingRequestEnableBt = false;
+                pendingRequestEnableBt = false;
                 if (resultCode != Activity.RESULT_OK) {
                     Utils.log("BT not enabled");
                 }
@@ -108,7 +155,7 @@ public class MainActivity extends AppCompatActivity {
 
         switch (item.getItemId()) {
             case R.id.menu_search:
-                if (super.isAdapterReady()) {
+                if (isAdapterReady()) {
                     if (isConnected()) stopConnection();
                     else startDeviceListActivity();
                 } else {
@@ -121,18 +168,51 @@ public class MainActivity extends AppCompatActivity {
                 if (logTextView != null) logTextView.setText("");
                 return true;
 
-            case R.id.menu_settings:
-                final Intent intent = new Intent(this, SettingsActivity.class);
-                startActivity(intent);
-                return true;
-
             default:
                 return super.onOptionsItemSelected(item);
         }
     }
 
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(SAVED_PENDING_REQUEST_ENABLE_BT, pendingRequestEnableBt);
+
+        outState.putString(DEVICE_NAME, deviceName);
+        if (logTextView != null) {
+            outState.putString(LOG, logHtml.toString());
+        }
+    }
+
+    @Override
+    public boolean onSearchRequested() {
+        if (isAdapterReady()) startDeviceListActivity();
+        return false;
+    }
 
     /* sub functions */
+
+    private boolean isConnected() {
+        return (connector != null) && (connector.getState() == DeviceConnector.STATE_CONNECTED);
+    }
+
+    private void stopConnection() {
+        if (connector != null) {
+            connector.stop();
+            connector = null;
+            deviceName = null;
+        }
+    }
+
+    boolean isAdapterReady() {
+        return (btAdapter != null) && (btAdapter.isEnabled());
+    }
+
+    private void startDeviceListActivity() {
+        stopConnection();
+        Intent serverIntent = new Intent(this, DeviceListActivity.class);
+        startActivityForResult(serverIntent, REQUEST_CONNECT_DEVICE);
+    }
 
     void showAlertDialog(String message) {
         AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(this);
@@ -140,15 +220,6 @@ public class MainActivity extends AppCompatActivity {
         alertDialogBuilder.setMessage(message);
         AlertDialog alertDialog = alertDialogBuilder.create();
         alertDialog.show();
-    }
-
-    private String getCommandEnding() {
-        String result = Utils.getPrefence(this, getString(R.string.pref_commands_ending));
-        if (result.equals("\\r\\n")) result = "\r\n";
-        else if (result.equals("\\n")) result = "\n";
-        else if (result.equals("\\r")) result = "\r";
-        else result = "";
-        return result;
     }
     // ==========================================================================
 
@@ -170,22 +241,12 @@ public class MainActivity extends AppCompatActivity {
             String commandString = commandEditText.getText().toString();
             if (commandString.isEmpty()) return;
 
-            // Дополнение команд в hex
-            if (hexMode && (commandString.length() % 2 == 1)) {
-                commandString = "0" + commandString;
-                commandEditText.setText(commandString);
-            }
+            byte[] command = (true ? Utils.toHex(commandString) : commandString.getBytes());
+            //if (command_ending != null) command = Utils.concat(command, command_ending.getBytes());
 
-            // checksum
-            if (checkSum) {
-                commandString += Utils.calcModulo256(commandString);
-            }
-
-            byte[] command = (hexMode ? Utils.toHex(commandString) : commandString.getBytes());
-            if (command_ending != null) command = Utils.concat(command, command_ending.getBytes());
             if (isConnected()) {
                 connector.write(command);
-                appendLog(commandString, hexMode, true, needClean);
+                appendLog(commandString, true, true, false);
             }
         }
     }
@@ -194,27 +255,15 @@ public class MainActivity extends AppCompatActivity {
     void appendLog(String message, boolean hexMode, boolean outgoing, boolean clean) {
 
         StringBuilder msg = new StringBuilder();
-        if (show_timings) msg.append("[").append(timeformat.format(new Date())).append("]");
-        if (show_direction) {
-            final String arrow = (outgoing ? " << " : " >> ");
-            msg.append(arrow);
-        } else msg.append(" ");
+        msg.append("[").append(Const.timeformat.format(new Date())).append("]");
+
+        final String arrow = (outgoing ? " << " : " >> ");
+        msg.append(arrow);
 
         message = message.replace("\r", "").replace("\n", "");
 
-        String crc = "";
-        boolean crcOk = false;
-        if (checkSum) {
-            int crcPos = message.length() - 2;
-            crc = message.substring(crcPos);
-            message = message.substring(0, crcPos);
-            crcOk = outgoing || crc.equals(Utils.calcModulo256(message).toUpperCase());
-            if (hexMode) crc = Utils.printHex(crc.toUpperCase());
-        }
-
         msg.append("<b>")
                 .append(hexMode ? Utils.printHex(message) : message)
-                .append(checkSum ? Utils.mark(crc, crcOk ? CRC_OK : CRC_BAD) : "")
                 .append("</b>")
                 .append("<br>");
 
@@ -274,7 +323,7 @@ public class MainActivity extends AppCompatActivity {
                     case Const.MESSAGE_READ:
                         final String readMessage = (String) msg.obj;
                         if (readMessage != null) {
-                            activity.appendLog(readMessage, false, false, activity.needClean);
+                            activity.appendLog(readMessage, false, false, false);
                         }
                         break;
 

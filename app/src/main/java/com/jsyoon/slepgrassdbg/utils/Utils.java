@@ -7,6 +7,8 @@ import android.text.InputFilter;
 import android.text.Spanned;
 import android.util.Log;
 
+import com.jsyoon.slepgrassdbg.BuildConfig;
+
 /**
  * Вспомогательные методы
  * Created by sash0k on 29.01.14.

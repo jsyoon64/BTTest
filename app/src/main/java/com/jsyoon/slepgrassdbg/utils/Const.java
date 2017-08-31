@@ -1,5 +1,7 @@
 package com.jsyoon.slepgrassdbg.utils;
 
+import java.text.SimpleDateFormat;
+
 /**
  * Created by sash0k on 12.12.13.
  * Общие константы
@@ -18,4 +20,8 @@ public class Const {
     public static final int MESSAGE_DEVICE_NAME = 4;
     public static final int MESSAGE_TOAST = 5;
 
+    private static final String CRC_OK = "#FFFF00";
+    private static final String CRC_BAD = "#FF0000";
+
+    public static final SimpleDateFormat timeformat = new SimpleDateFormat("HH:mm:ss.SSS");
 }
