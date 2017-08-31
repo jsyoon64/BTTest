@@ -1,4 +1,9 @@
 <resources>
     <string name="app_name">SlepGrassDBG</string>
     <string name="action_settings">Settings</string>
+
+    <!-- subtitle string -->
+    <string name="msg_not_connected">not connected</string>
+    <string name="msg_connecting">connecting…</string>
+    <string name="msg_connected">connected</string>
 </resources>
