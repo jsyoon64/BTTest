@@ -6,4 +6,18 @@
     <string name="msg_not_connected">not connected</string>
     <string name="msg_connecting">connecting…</string>
     <string name="msg_connected">connected</string>
+
+    <!-- bluetooth string -->
+    <string name="action_bluetooth">on/off</string>
+    <string name="no_bt_support">Your device doesn\'t support bluetooth.</string>
+    <string name="empty_device_name">&lt;New device&gt;</string>
+
+    <!-- Command string -->
+    <string name="command_hint">Enter command here</string>
+    <string name="button_send">Send</string>
+
+    <!-- Menu option string -->
+    <string name="menu_send">Send log…</string>
+    <string name="menu_settings">Settings</string>
+    <string name="menu_clear">Clear history</string>
 </resources>
